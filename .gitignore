@@ -1,0 +1,3 @@
+src/checkpoint
+src/model*
+src/tflearn*
