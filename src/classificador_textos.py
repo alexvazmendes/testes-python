@@ -1,6 +1,4 @@
 '''
-Created on 23 de mai de 2018
-
 @author: alexvaz
 '''
 import pandas as pd
@@ -11,106 +9,97 @@ import numpy as np
 import tflearn
 import tensorflow as tf
 
-
-arquivo = pd.read_csv('textos.csv', encoding = 'utf-8')
-
 stopwords = nltk.corpus.stopwords.words('portuguese')
 stemmer = nltk.stem.RSLPStemmer()
 
+def get_tokens_validos(frase):
+    frase = frase.lower()
+    tokens = nltk.tokenize.word_tokenize(frase)
+    tokens_validos = [stemmer.stem(palavra) for palavra in tokens if palavra not in stopwords and len(palavra) > 2]
+    return tokens_validos
 
-palavras = []
+def get_vetor_teste(frase):
+    global dicionario
+    
+    tokens_frase = get_tokens_validos(frase)
+   
+    vetor = [0]*len(dicionario)
+    for s in tokens_frase:
+        for i, w in enumerate(dicionario):
+            if w == s:
+                vetor[i] = 1
+
+    return(np.array(vetor))
+
+dicionario = []
 docs = []
 categorias = []
 
+arquivo = pd.read_csv('textos.csv', encoding = 'utf-8')
 for index, row in arquivo.iterrows():
-    frase = row['Texto'].lower()
-    tokens = nltk.tokenize.word_tokenize(frase)
-    
-    tokens_validos = validas = [stemmer.stem(palavra) for palavra in tokens if palavra not in stopwords and len(palavra) > 2]
+    tokens_validos = get_tokens_validos(row['Texto'])
         
-    palavras.extend(tokens_validos)
+    dicionario.extend(tokens_validos)
     
     categoria = row['Categoria']
     if categoria not in categorias:
         categorias.append(categoria)
     
-    docs.append((tokens, row['Categoria']))
-#    print row['Texto'], row['Categoria']
+    docs.append((tokens_validos, row['Categoria']))
 
-palavras = sorted(list(set(palavras)))
+dicionario = sorted(list(set(dicionario)))
 
-print palavras
-print docs
-print categorias
-
-'''
-textosPuros = arquivo['Texto']
-frases = textosPuros.str.lower()
-textosQuebrados = [nltk.tokenize.word_tokenize(frase) for frase in frases]
-
-
-#nltk.download('punkt')
-#nltk.download('stopwords')
-stopwords = nltk.corpus.stopwords.words('portuguese')
-
-#nltk.download('rslp')
-stemmer = nltk.stem.RSLPStemmer()
-
-dicionario = set()
-for lista in textosQuebrados:
-    validas = [stemmer.stem(palavra) for palavra in lista if palavra not in stopwords and len(palavra) > 2]
-    dicionario.update(validas)
-#print dicionario
-'''
-
-training = []
-output = []
-# create an empty array for our output
-output_empty = [0] * len(categorias)
-
+dados_treino = []
+saida_vazia = [0] * len(categorias)
 
 for doc in docs:
-    # initialize our bag of words(bow) for each document in the list
-    bow = []
-    # list of tokenized words for the pattern
-    token_words = doc[0]
-    # stem each word
-    token_words = [stemmer.stem(word.lower()) for word in token_words]
-    # create our bag of words array
-    for w in palavras:
-        bow.append(1) if w in token_words else bow.append(0)
+    vetor_binario = []
+    tokens = doc[0]
+    
+    for p in dicionario:
+        vetor_binario.append(1) if p in tokens else vetor_binario.append(0)
 
-    output_row = list(output_empty)
-    output_row[categorias.index(doc[1])] = 1
+    saida = list(saida_vazia)
+    saida[categorias.index(doc[1])] = 1
+    
+    dados_treino.append([vetor_binario, saida])
 
-    # our training set will contain a the bag of words model and the output row that tells
-    # which catefory that bow belongs to.
-    training.append([bow, output_row])
 
-# shuffle our features and turn into np.array as tensorflow  takes in numpy array
-random.shuffle(training)
-training = np.array(training)
 
-# trainX contains the Bag of words and train_y contains the label/ category
-train_x = list(training[:, 0])
-train_y = list(training[:, 1])
+random.shuffle(dados_treino)
+dados_treino = np.array(dados_treino)
+print dados_treino
 
-# reset underlying graph data
+treino_x = list(dados_treino[:, 0])
+treino_y = list(dados_treino[:, 1])
+
 tf.reset_default_graph()
-# Build neural network
-net = tflearn.input_data(shape=[None, len(train_x[0])])
-net = tflearn.fully_connected(net, 8)
-net = tflearn.fully_connected(net, 8)
-net = tflearn.fully_connected(net, len(train_y[0]), activation='softmax')
-net = tflearn.regression(net)
 
-# Define model and setup tensorboard
-model = tflearn.DNN(net, tensorboard_dir='tflearn_logs')
-# Start training (apply gradient descent algorithm)
-model.fit(train_x, train_y, n_epoch=5000, batch_size=8, show_metric=True)
-model.save('model.tflearn')
+rede = tflearn.input_data(shape=[None, len(treino_x[0])])
+rede = tflearn.fully_connected(rede, 10)
+rede = tflearn.fully_connected(rede, 10)
+rede = tflearn.fully_connected(rede, len(treino_y[0]), activation='softmax')
+rede = tflearn.regression(rede)
 
 
+modelo = tflearn.DNN(rede, tensorboard_dir='tflearn_logs')
+modelo.fit(treino_x, treino_y, n_epoch=1000, batch_size=5, show_metric=True)
+modelo.save('model.tflearn')
 
+# TESTES
+arquivo2 = pd.read_csv('testes.csv', encoding = 'utf-8')
 
+num_testes = 0
+num_acertos = 0
+for index, row in arquivo2.iterrows():
+    previsao = categorias[np.argmax(modelo.predict([get_vetor_teste(row['Texto'])]))]
+    categoria_teste = row['Categoria']
+    num_testes = num_testes + 1
+    print "Frase {0}, Previsao: {1}, Categoria Real: {2}".format(num_testes, previsao, categoria_teste)
+    if previsao == categoria_teste:
+        num_acertos = num_acertos + 1
 
+print "Total de testes: {0}".format(num_testes)
+print "Acertos: {0}".format(num_acertos)
+taxa_de_acerto = 100.0 * num_acertos / num_testes
+print "Taxa de Acertos: {0}%".format(taxa_de_acerto)

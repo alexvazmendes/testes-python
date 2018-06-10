@@ -50,5 +50,30 @@ for each_category in data.keys():
 words = [stemmer.stem(w.lower()) for w in words]
 words = sorted(list(set(words)))
 
-#print(words)
-#print(docs)
+print(words)
+print(docs)
+
+# create our training data
+training = []
+output = []
+# create an empty array for our output
+output_empty = [0] * len(categories)
+
+
+for doc in docs:
+    # initialize our bag of words(bow) for each document in the list
+    bow = []
+    # list of tokenized words for the pattern
+    token_words = doc[0]
+    # stem each word
+    token_words = [stemmer.stem(word.lower()) for word in token_words]
+    # create our bag of words array
+    for w in words:
+        bow.append(1) if w in token_words else bow.append(0)
+
+    output_row = list(output_empty)
+    output_row[categories.index(doc[1])] = 1
+    print output_row
+    # our training set will contain a the bag of words model and the output row that tells
+    # which catefory that bow belongs to.
+    training.append([bow, output_row])
